@@ -103,19 +103,22 @@ class RXSolutionsDataReader(object):
         self.mode = mode
         self.fliplr = fliplr
 
+        # Error check
         # Check a file name was provided
         if file_name is None:
-            raise ValueError('Path to unireconstruction.xml file is required.')
+            raise ValueError('Path to unireconstruction.xml or geom.csv file is required.')
 
+        # Error check
         # Check if the file exists
         file_name = os.path.abspath(file_name)
         if not(os.path.isfile(file_name)):
             raise FileNotFoundError('{}'.format(file_name))
 
+        # Error check
         # Check the file name without the path
-        file_type = os.path.basename(file_name).lower()
-        if file_type != "unireconstruction.xml":
-            raise TypeError('This reader can only process \"unireconstruction.xml\" files. Got {}'.format(file_type))
+        file_type = self.get_file_type(file_name)
+        if file_type != "unireconstruction.xml" and file_type != "geom.csv":
+            raise TypeError('This reader can only process \"unireconstruction.xml\" or \"geom.csv\" files. Got {}'.format(file_type))
 
         # Get the directory path
         directory_path = Path(os.path.dirname(file_name))
@@ -125,8 +128,28 @@ class RXSolutionsDataReader(object):
         if not os.path.isdir(self.tiff_directory_path):
             raise ValueError(f"The projection directory '{self.tiff_directory_path}' does not exist")
 
+        # Traditional orbital geometry
+        if file_type == "unireconstruction.xml":
+            self.set_up_orbital()
+        # Per-projection geometry
+        elif file_type == "geom.csv":
+            self.set_up_flexible()
+        # Error check
+        else:
+            raise ValueError("Cannot read \"" + file_type + "\".")
+
+    def get_file_type(self, file_name):
+        return os.path.basename(file_name).lower()
+        
+    def set_up_orbital(self):
+
+        # Error check
+        file_type = self.get_file_type(self.file_name)
+        if file_type != "unireconstruction.xml":
+            raise TypeError('This method can only process \"unireconstruction.xml\" files. Got {}'.format(file_type))
+
         # Open the XML file
-        tree = ElementTree.parse(file_name)
+        tree = ElementTree.parse(self.file_name)
 
         # Find the conebeam profile
         profile = tree.find("conebeam/profile")
@@ -153,6 +176,7 @@ class RXSolutionsDataReader(object):
         object_to_detector = source_to_detector - source_to_object
 
         # Known values from the manufacturer
+        print("Find a way to get this number")
         pixel_size_in_um = 150
         pixel_size_in_mm = pixel_size_in_um * 0.001
 
@@ -176,6 +200,35 @@ class RXSolutionsDataReader(object):
 
         # Panel is width x height
         self._ag.set_panel(first_projection_data.shape[::-1], pixel_size_in_mm, origin='top-left')
+
+    def set_up_flexible(self):
+        
+        # Error check
+        file_type = self.get_file_type(self.file_name)
+        if file_type != "geom.csv":
+            raise TypeError('This method can only process \"geom.csv\" files. Got {}'.format(file_type))
+
+        self.meta_data = np.loadtxt(self.file_name, 
+            delimiter=';',
+            skiprows=2,
+            usecols=(1,2,3,4,5,6,7,8,9,10,11,12))
+        
+        self.new_columns = [
+            "source - x",
+            "source - y",
+            "source - z",
+            "Imager Center - x",
+            "Imager Center - y",
+            "Imager Center - z",
+            "Imager Top - x",
+            "Imager Top - y",
+            "Imager Top - z",
+            "Imager Right - x",
+            "Imager Right - y",
+            "Imager Right - z"
+        ]
+        
+
 
     def read(self):
         
