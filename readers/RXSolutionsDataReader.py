@@ -46,24 +46,6 @@ class RXSolutionsDataReader(object):
 
     fliplr: bool, default = False,
         flip projections in the left-right direction (about vertical axis)
-
-    Notes
-    -----
-    `roi` behaviour:
-        Files are stacked along axis_0. axis_1 and axis_2 correspond
-        to row and column dimensions, respectively.
-        
-        Files are stacked in alphabetic order. 
-        
-        To skip projections or to change number of projections to load, 
-        adjust 'angle'. For instance, 'angle': (100, 300)
-        will skip first 100 projections and will load 200 projections.
-        
-        ``'angle': -1`` is a shortcut to load all elements along axis.
-            
-        ``start`` and ``end`` can be specified as ``None`` which is equivalent
-        to ``start = 0`` and ``end = load everything to the end``, respectively.
-        Start and end also can be negative.
     '''
     
     def __init__(self,
@@ -117,7 +99,6 @@ class RXSolutionsDataReader(object):
 
         # Save the attributes
         self.file_name = file_name
-        # self.roi = roi
         self.normalise = normalise
         self.mode = mode
         self.fliplr = fliplr
@@ -212,7 +193,6 @@ class RXSolutionsDataReader(object):
         reader = TIFFStackReader()
 
         reader.set_up(file_name=self.tiff_directory_path,
-                    #   roi=roi,
                       mode=self.mode)
 
         ad = reader.read_as_AcquisitionData(self._ag)
