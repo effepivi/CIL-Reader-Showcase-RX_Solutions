@@ -37,23 +37,15 @@ class RXSolutionsDataReader(object):
 
     normalise: bool, default=True
         normalises loaded projections by detector white level (I_0)
-
-    mode: str: {'bin', 'slice'}, default='bin'
-        In bin mode, 'step' number of pixels is binned together,
-        values of resulting binned pixels are calculated as average. 
-        In 'slice' mode 'step' defines standard numpy slicing.
-        Note: in general output array size in bin mode != output array size in slice mode
     '''
     
     def __init__(self,
                  file_name: str=None,
-                 normalise: bool=True,
-                 mode: str="bin"):
+                 normalise: bool=True):
 
         # Initialise class attributes to None
         self.file_name = None
         self.normalise = normalise
-        self.mode = mode
         self._ag = None # The acquisition geometry object
         self.tiff_directory_path = None
 
@@ -67,8 +59,7 @@ class RXSolutionsDataReader(object):
 
     def set_up(self,
                file_name: str=None,
-               normalise: bool=True,
-               mode: str="bin"):
+               normalise: bool=True):
 
         '''Set up the reader
         
@@ -79,18 +70,11 @@ class RXSolutionsDataReader(object):
 
         normalise: bool, default=True
             normalises loaded projections by detector white level (I_0)
-
-        mode: str: {'bin', 'slice'}, default='bin'
-            In bin mode, 'step' number of pixels is binned together,
-            values of resulting binned pixels are calculated as average. 
-            In 'slice' mode 'step' defines standard numpy slicing.
-            Note: in general output array size in bin mode != output array size in slice mode
         '''
 
         # Save the attributes
         self.file_name = file_name
         self.normalise = normalise
-        self.mode = mode
 
         # Error check
         # Check a file name was provided
@@ -269,8 +253,7 @@ class RXSolutionsDataReader(object):
         # Create the TIFF reader
         reader = TIFFStackReader()
 
-        reader.set_up(file_name=self.tiff_directory_path,
-                      mode=self.mode)
+        reader.set_up(file_name=self.tiff_directory_path)
 
         ad = reader.read_as_AcquisitionData(self._ag)
               
