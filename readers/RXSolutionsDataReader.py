@@ -116,7 +116,7 @@ class RXSolutionsDataReader(object):
 
         # Error check
         # Check the file name without the path
-        file_type = self.get_file_type(file_name)
+        file_type = self.__get_file_type(file_name)
         if file_type != "unireconstruction.xml" and file_type != "geom.csv":
             raise TypeError('This reader can only process \"unireconstruction.xml\" or \"geom.csv\" files. Got {}'.format(file_type))
 
@@ -130,21 +130,21 @@ class RXSolutionsDataReader(object):
 
         # Traditional orbital geometry
         if file_type == "unireconstruction.xml":
-            self.set_up_orbital()
+            self.__set_up_orbital()
         # Per-projection geometry
         elif file_type == "geom.csv":
-            self.set_up_flexible()
+            self.__set_up_flexible()
         # Error check
         else:
             raise ValueError("Cannot read \"" + file_type + "\".")
 
-    def get_file_type(self, file_name):
+    def __get_file_type(self, file_name):
         return os.path.basename(file_name).lower()
         
-    def set_up_orbital(self):
+    def __set_up_orbital(self):
 
         # Error check
-        file_type = self.get_file_type(self.file_name)
+        file_type = self.__get_file_type(self.file_name)
         if file_type != "unireconstruction.xml":
             raise TypeError('This method can only process \"unireconstruction.xml\" files. Got {}'.format(file_type))
 
@@ -176,7 +176,7 @@ class RXSolutionsDataReader(object):
         object_to_detector = source_to_detector - source_to_object
 
         # Known values from the manufacturer
-        print("Find a way to get this number")
+        print("******** Find a way to get the pixel pitch, for now it is hard-coded *********")
         pixel_size_in_um = 150
         pixel_size_in_mm = pixel_size_in_um * 0.001
 
@@ -186,7 +186,8 @@ class RXSolutionsDataReader(object):
             detector_direction_x=[1, 0,  0],
             detector_direction_y=[0, 0, 1],
             detector_position=[0, object_to_detector, 0], 
-            rotation_axis_position=[0, 0, 0])
+            rotation_axis_position=[0, 0, 0],
+            units='mm')
 
         # Set the angles of rotation
         self._ag.set_angles(np.linspace(360, 0, number_of_projections))
@@ -201,34 +202,68 @@ class RXSolutionsDataReader(object):
         # Panel is width x height
         self._ag.set_panel(first_projection_data.shape[::-1], pixel_size_in_mm, origin='top-left')
 
-    def set_up_flexible(self):
+    def __set_up_flexible(self):
         
         # Error check
-        file_type = self.get_file_type(self.file_name)
+        file_type = self.__get_file_type(self.file_name)
         if file_type != "geom.csv":
             raise TypeError('This method can only process \"geom.csv\" files. Got {}'.format(file_type))
 
-        self.meta_data = np.loadtxt(self.file_name, 
+        meta_data = np.loadtxt(self.file_name, 
             delimiter=';',
             skiprows=2,
             usecols=(1,2,3,4,5,6,7,8,9,10,11,12))
         
-        self.new_columns = [
-            "source - x",
-            "source - y",
-            "source - z",
-            "Imager Center - x",
-            "Imager Center - y",
-            "Imager Center - z",
-            "Imager Top - x",
-            "Imager Top - y",
-            "Imager Top - z",
-            "Imager Right - x",
-            "Imager Right - y",
-            "Imager Right - z"
-        ]
-        
+        # Get the number of projections
+        number_of_projections = meta_data.shape[0]
 
+        # Look for the name of projection images
+        image_file_names = [image for image in self.tiff_directory_path.rglob("*.tif")]
+        assert (len(image_file_names) == number_of_projections)
+            
+        # Read the first projection to extract its size in nmber of pixels
+        first_projection_data = imread(image_file_names[0]);
+        projection_shape = first_projection_data.shape;
+
+        # Format the metadata
+        source_position_set = meta_data[:,:3]
+        detector_position_set = meta_data[:,3:6]
+        detector_direction_y_set = (meta_data[:,6:9] - detector_position_set) / projection_shape[1]*2
+        detector_direction_x_set = (meta_data[:,9:] - detector_position_set) / projection_shape[0]*2
+
+        # Recentre the data on the Y-axis
+        Y = np.mean(meta_data[:,[1,4]])
+        source_position_set[:,1] -= Y
+        detector_position_set[:,1] -= Y
+
+        # Axes transformation
+        # X->Y
+        # Y->Z
+        # Z->X
+        source_position_set = np.roll(source_position_set, 1, axis=1)
+        detector_position_set = np.roll(detector_position_set, 1, axis=1)
+        detector_direction_y_set = np.roll(detector_direction_y_set, 1, axis=1)
+        detector_direction_x_set = np.roll(detector_direction_x_set, 1, axis=1)
+
+        # The pixel size in mm is the norm of the vectors in detector_direction_x_set and detector_direction_y_set
+        pixel_size_in_mm = np.linalg.norm(
+            (detector_direction_x_set[0, 0], detector_direction_x_set[0, 1], detector_direction_x_set[0, 2])
+        )
+        
+        # Create the acquisition geometry
+        self._ag = AcquisitionGeometry.create_Cone3D_Flex(
+            source_position_set, 
+            detector_position_set, 
+            detector_direction_x_set, 
+            detector_direction_y_set, 
+            volume_centre_position=[0,0,0], 
+            units='mm')
+        
+        # self._ag.set_panel(detector_number_of_pixels, pixel_spacing_mm)
+        self._ag.set_labels(['projection','vertical','horizontal'])
+
+        # Panel is width x height
+        self._ag.set_panel(first_projection_data.shape[::-1], pixel_size_in_mm, origin='top-left')
 
     def read(self):
         
@@ -275,10 +310,4 @@ class RXSolutionsDataReader(object):
         Return AcquisitionGeometry object
         '''
         
-        return self._ag
-
-    def get_geometry(self):
-        '''
-        Return the acquisition geometry object
-        '''
         return self._ag
