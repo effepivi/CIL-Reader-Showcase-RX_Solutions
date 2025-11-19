@@ -43,22 +43,17 @@ class RXSolutionsDataReader(object):
         values of resulting binned pixels are calculated as average. 
         In 'slice' mode 'step' defines standard numpy slicing.
         Note: in general output array size in bin mode != output array size in slice mode
-
-    fliplr: bool, default = False,
-        flip projections in the left-right direction (about vertical axis)
     '''
     
     def __init__(self,
                  file_name: str=None,
                  normalise: bool=True,
-                 mode: str="bin",
-                 fliplr: bool=False):
+                 mode: str="bin"):
 
         # Initialise class attributes to None
         self.file_name = None
         self.normalise = normalise
         self.mode = mode
-        self.fliplr = fliplr
         self._ag = None # The acquisition geometry object
         self.tiff_directory_path = None
 
@@ -67,15 +62,13 @@ class RXSolutionsDataReader(object):
 
             # Initialise the instance
             self.set_up(file_name=file_name,
-                normalise=normalise,
-                fliplr=fliplr)
+                normalise=normalise)
 
 
     def set_up(self,
                file_name: str=None,
                normalise: bool=True,
-               mode: str="bin",
-               fliplr: bool=False):
+               mode: str="bin"):
 
         '''Set up the reader
         
@@ -92,16 +85,12 @@ class RXSolutionsDataReader(object):
             values of resulting binned pixels are calculated as average. 
             In 'slice' mode 'step' defines standard numpy slicing.
             Note: in general output array size in bin mode != output array size in slice mode
-
-        fliplr: bool, default = False,
-            flip projections in the left-right direction (about vertical axis)
         '''
 
         # Save the attributes
         self.file_name = file_name
         self.normalise = normalise
         self.mode = mode
-        self.fliplr = fliplr
 
         # Error check
         # Check a file name was provided
@@ -232,7 +221,7 @@ class RXSolutionsDataReader(object):
         detector_direction_x_set = (meta_data[:,9:] - detector_position_set) / projection_shape[0]*2
 
         # Recentre the data on the Y-axis
-        Y = np.mean(meta_data[:,[1,4]])
+        Y = np.mean(meta_data[:,4])
         source_position_set[:,1] -= Y
         detector_position_set[:,1] -= Y
 
@@ -249,7 +238,7 @@ class RXSolutionsDataReader(object):
         pixel_size_in_mm = np.linalg.norm(
             (detector_direction_x_set[0, 0], detector_direction_x_set[0, 1], detector_direction_x_set[0, 2])
         )
-        
+
         # Create the acquisition geometry
         self._ag = AcquisitionGeometry.create_Cone3D_Flex(
             source_position_set, 
@@ -291,12 +280,7 @@ class RXSolutionsDataReader(object):
 
             # cast the data read to float32
             ad = ad / np.float32(white_level)
-            
-        
-        if self.fliplr:
-            dim = ad.get_dimension_axis('horizontal')
-            ad.array = np.flip(ad.array, dim)
-        
+                    
         return ad
 
     def load_projections(self):
