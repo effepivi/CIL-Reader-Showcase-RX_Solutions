@@ -228,9 +228,8 @@ class RXSolutionsDataReader(object):
         detector_direction_y_set = (meta_data[:,6:9] - detector_position_set) / projection_shape[1]*2
         detector_direction_x_set = (meta_data[:,9:] - detector_position_set) / projection_shape[0]*2
 
-        # Recentre the data on the Y-axis
-        Y = np.mean(meta_data[:,4]) # Detector
-        Y = np.mean(meta_data[:,1]) # Detector
+        # Roughly recentre the data on the Y-axis
+        Y = 0.5 * np.mean(meta_data[:,4]) + 0.5 * np.mean(meta_data[:,1])
         source_position_set[:,1] -= Y
         detector_position_set[:,1] -= Y
 
@@ -242,7 +241,15 @@ class RXSolutionsDataReader(object):
         detector_position_set = np.roll(detector_position_set, 1, axis=1)
         detector_direction_y_set = np.roll(detector_direction_y_set, 1, axis=1)
         detector_direction_x_set = np.roll(detector_direction_x_set, 1, axis=1)
-            
+        
+        # More finely recentre the data on the Z-axis (previously Y-axis)
+        sod = (np.sum(source_position_set**2, axis=1)**.5).mean()
+        sdd = (np.sum((source_position_set-detector_position_set)**2, axis=1)**.5).mean()
+        alpha = sod / sdd
+        Z = alpha * np.mean(meta_data[:,4]) + (1 - alpha) * np.mean(meta_data[:,1])
+        source_position_set[:,2] -= Z
+        detector_position_set[:,2] -= Z
+
         # The pixel size in mm is the norm of the vectors in detector_direction_x_set and detector_direction_y_set
         self.pixel_pitch_in_mm = np.linalg.norm(
             (detector_direction_x_set[0, 0], detector_direction_x_set[0, 1], detector_direction_x_set[0, 2])
