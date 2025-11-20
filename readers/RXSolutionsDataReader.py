@@ -175,8 +175,8 @@ class RXSolutionsDataReader(object):
             raise ValueError("The pixel pitch in mm must be known when using \"unireconstruction.xml\".")
 
         scaling_factor_axis_1, scaling_factor_axis_2 = self.__get_scaling_factors()
-        self.pixel_pitch_in_mm[0] *= scaling_factor_axis_1
-        self.pixel_pitch_in_mm[1] *= scaling_factor_axis_2
+        self.pixel_pitch_in_mm[0] *= scaling_factor_axis_2
+        self.pixel_pitch_in_mm[1] *= scaling_factor_axis_1
         
         # Open the XML file
         tree = ElementTree.parse(self.file_name)
@@ -301,8 +301,8 @@ class RXSolutionsDataReader(object):
         )
         scaling_factor_axis_1, scaling_factor_axis_2 = self.__get_scaling_factors()
         self.pixel_pitch_in_mm = [
-            pixel_pitch_in_mm * scaling_factor_axis_1,
-            pixel_pitch_in_mm * scaling_factor_axis_2
+            pixel_pitch_in_mm * scaling_factor_axis_2,
+            pixel_pitch_in_mm * scaling_factor_axis_1
         ]
         
         # Create the acquisition geometry
