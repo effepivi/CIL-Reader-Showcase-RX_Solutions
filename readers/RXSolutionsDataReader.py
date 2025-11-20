@@ -133,7 +133,8 @@ class RXSolutionsDataReader(object):
 
         # Look for the name of projection images
         image_file_names = [image for image in self.tiff_directory_path.rglob("*.tif")]
-        assert (len(image_file_names) == number_of_projections)
+        if len(image_file_names) != number_of_projections:
+            raise IOError("There are " + str(len(image_file_names) + " TIFF files in the projection directory. We expected " + str(number_of_projections) + " based on the \"unireconstruction.xml\" file.")
 
         # Find the acquisition information
         acquisition_info = tree.find("conebeam/acquisitioninfo")
@@ -155,10 +156,10 @@ class RXSolutionsDataReader(object):
 
         # Create the acquisition geometry
         self._ag = AcquisitionGeometry.create_Cone3D(
-            source_position=[0, -source_to_object, 0], 
-            detector_direction_x=[1, 0,  0],
+            source_position=[-source_to_object, 0, 0], 
+            detector_direction_x=[0, -1,  0],
             detector_direction_y=[0, 0, 1],
-            detector_position=[0, object_to_detector, 0], 
+            detector_position=[object_to_detector, 0, 0], 
             rotation_axis_position=[0, 0, 0],
             units='mm')
 
@@ -192,7 +193,8 @@ class RXSolutionsDataReader(object):
 
         # Look for the name of projection images
         image_file_names = [image for image in self.tiff_directory_path.rglob("*.tif")]
-        assert (len(image_file_names) == number_of_projections)
+        if len(image_file_names) != number_of_projections:
+            raise IOError("There are " + str(len(image_file_names) + " TIFF files in the projection directory. We expected " + str(number_of_projections) + " based on the \"geom.csv\" file.")
             
         # Read the first projection to extract its size in nmber of pixels
         first_projection_data = imread(image_file_names[0]);
@@ -210,14 +212,31 @@ class RXSolutionsDataReader(object):
         detector_position_set[:,1] -= Y
 
         # Axes transformation
-        # X->Y
-        # Y->Z
-        # Z->X
+        # # X->Y
+        # # Y->Z
+        # # Z->X
         source_position_set = np.roll(source_position_set, 1, axis=1)
         detector_position_set = np.roll(detector_position_set, 1, axis=1)
         detector_direction_y_set = np.roll(detector_direction_y_set, 1, axis=1)
         detector_direction_x_set = np.roll(detector_direction_x_set, 1, axis=1)
 
+        # def swap_axes(a, c1, c2):
+        #     temp = np.copy(a[:,c1])
+        #     a[:,c1] = np.copy(a[:,c2])
+        #     a[:,c2] = temp
+        #     return a
+
+        # source_position_set = swap_axes(source_position_set, 0, 2)
+        # detector_position_set = swap_axes(detector_position_set, 0, 2)
+        # detector_direction_y_set = swap_axes(detector_direction_y_set, 0, 2)
+        # detector_direction_x_set = swap_axes(detector_direction_x_set, 0, 2)
+
+        # source_position_set = swap_axes(source_position_set, 1, 2)
+        # detector_position_set = swap_axes(detector_position_set, 1, 2)
+        # detector_direction_y_set = swap_axes(detector_direction_y_set, 1, 2)
+        # detector_direction_x_set = swap_axes(detector_direction_x_set, 1, 2)
+
+            
         # The pixel size in mm is the norm of the vectors in detector_direction_x_set and detector_direction_y_set
         pixel_size_in_mm = np.linalg.norm(
             (detector_direction_x_set[0, 0], detector_direction_x_set[0, 1], detector_direction_x_set[0, 2])
