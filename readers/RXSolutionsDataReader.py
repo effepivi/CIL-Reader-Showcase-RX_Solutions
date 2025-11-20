@@ -134,7 +134,7 @@ class RXSolutionsDataReader(object):
         # Look for the name of projection images
         image_file_names = [image for image in self.tiff_directory_path.rglob("*.tif")]
         if len(image_file_names) != number_of_projections:
-            raise IOError("There are " + str(len(image_file_names) + " TIFF files in the projection directory. We expected " + str(number_of_projections) + " based on the \"unireconstruction.xml\" file.")
+            raise IOError("There are " + str(len(image_file_names) + " TIFF files in the projection directory. We expected " + str(number_of_projections) + " based on the \"unireconstruction.xml\" file."))
 
         # Find the acquisition information
         acquisition_info = tree.find("conebeam/acquisitioninfo")
@@ -194,7 +194,7 @@ class RXSolutionsDataReader(object):
         # Look for the name of projection images
         image_file_names = [image for image in self.tiff_directory_path.rglob("*.tif")]
         if len(image_file_names) != number_of_projections:
-            raise IOError("There are " + str(len(image_file_names) + " TIFF files in the projection directory. We expected " + str(number_of_projections) + " based on the \"geom.csv\" file.")
+            raise IOError("There are " + str(len(image_file_names) + " TIFF files in the projection directory. We expected " + str(number_of_projections) + " based on the \"geom.csv\" file."))
             
         # Read the first projection to extract its size in nmber of pixels
         first_projection_data = imread(image_file_names[0]);
