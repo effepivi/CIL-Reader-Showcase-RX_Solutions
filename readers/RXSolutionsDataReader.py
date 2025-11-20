@@ -41,25 +41,38 @@ class RXSolutionsDataReader(object):
     
     def __init__(self,
                  file_name: str=None,
-                 normalise: bool=True):
+                 pixel_pitch_in_mm: (float,float)=None,
+                 normalise: bool=True,
+                 mode: str="bin",
+                 roi = None
+                ):
 
         # Initialise class attributes to None
         self.file_name = None
+        self.pixel_pitch_in_mm = None,
         self.normalise = normalise
         self._ag = None # The acquisition geometry object
         self.tiff_directory_path = None
+        self.mode = None
+        self.roi = None
 
         # The file name is set
         if file_name is not None:
 
             # Initialise the instance
             self.set_up(file_name=file_name,
-                normalise=normalise)
+                pixel_pitch_in_mm=pixel_pitch_in_mm,
+                normalise=normalise,
+                mode=mode,
+                roi=roi)
 
 
     def set_up(self,
                file_name: str=None,
-               normalise: bool=True):
+               pixel_pitch_in_mm: (float,float)=None,
+               normalise: bool=True,
+               mode: str="bin",
+               roi = None):
 
         '''Set up the reader
         
@@ -74,6 +87,7 @@ class RXSolutionsDataReader(object):
 
         # Save the attributes
         self.file_name = file_name
+        self.pixel_pitch_in_mm = pixel_pitch_in_mm
         self.normalise = normalise
 
         # Error check
@@ -93,6 +107,14 @@ class RXSolutionsDataReader(object):
         if file_type != "unireconstruction.xml" and file_type != "geom.csv":
             raise TypeError('This reader can only process \"unireconstruction.xml\" or \"geom.csv\" files. Got {}'.format(file_type))
 
+        # Error check
+        if mode is not None and mode != "bin":
+            raise ValueError('mode should be equal to None or \"bin\" only.')
+
+        # Error check
+        # if roi is not None:
+            
+        
         # Get the directory path
         directory_path = Path(os.path.dirname(file_name))
 
@@ -120,6 +142,10 @@ class RXSolutionsDataReader(object):
         file_type = self.__get_file_type(self.file_name)
         if file_type != "unireconstruction.xml":
             raise TypeError('This method can only process \"unireconstruction.xml\" files. Got {}'.format(file_type))
+
+        # Error check
+        if self.pixel_pitch_in_mm is None:
+            raise ValueError("The pixel pitch in mm must be known when using \"unireconstruction.xml\".")
 
         # Open the XML file
         tree = ElementTree.parse(self.file_name)
@@ -149,22 +175,17 @@ class RXSolutionsDataReader(object):
         source_to_object = float(conf_geo.attrib["sod"])
         object_to_detector = source_to_detector - source_to_object
 
-        # Known values from the manufacturer
-        print("******** Find a way to get the pixel pitch, for now it is hard-coded *********")
-        pixel_size_in_um = 150
-        pixel_size_in_mm = pixel_size_in_um * 0.001
-
         # Create the acquisition geometry
         self._ag = AcquisitionGeometry.create_Cone3D(
             source_position=[-source_to_object, 0, 0], 
-            detector_direction_x=[0, -1,  0],
+            detector_direction_x=[0, 1,  0],
             detector_direction_y=[0, 0, 1],
             detector_position=[object_to_detector, 0, 0], 
             rotation_axis_position=[0, 0, 0],
             units='mm')
 
         # Set the angles of rotation
-        self._ag.set_angles(np.linspace(360, 0, number_of_projections))
+        self._ag.set_angles(np.linspace(0, 360, number_of_projections))
 
         # Read the first projection to extract its size in nmber of pixels
         first_projection_data = imread(image_file_names[0])
@@ -174,7 +195,7 @@ class RXSolutionsDataReader(object):
         self._ag.set_labels(['angle','vertical','horizontal'])
 
         # Panel is width x height
-        self._ag.set_panel(first_projection_data.shape[::-1], pixel_size_in_mm, origin='top-left')
+        self._ag.set_panel(first_projection_data.shape[::-1], self.pixel_pitch_in_mm, origin='top-left')
 
     def __set_up_flexible(self):
         
@@ -198,7 +219,8 @@ class RXSolutionsDataReader(object):
             
         # Read the first projection to extract its size in nmber of pixels
         first_projection_data = imread(image_file_names[0]);
-        projection_shape = first_projection_data.shape;
+        projection_shape = np.array(first_projection_data.shape);
+        print("Assess the image size using", image_file_names[0])
 
         # Format the metadata
         source_position_set = meta_data[:,:3]
@@ -207,7 +229,8 @@ class RXSolutionsDataReader(object):
         detector_direction_x_set = (meta_data[:,9:] - detector_position_set) / projection_shape[0]*2
 
         # Recentre the data on the Y-axis
-        Y = np.mean(meta_data[:,4])
+        Y = np.mean(meta_data[:,4]) # Detector
+        Y = np.mean(meta_data[:,1]) # Detector
         source_position_set[:,1] -= Y
         detector_position_set[:,1] -= Y
 
@@ -219,26 +242,9 @@ class RXSolutionsDataReader(object):
         detector_position_set = np.roll(detector_position_set, 1, axis=1)
         detector_direction_y_set = np.roll(detector_direction_y_set, 1, axis=1)
         detector_direction_x_set = np.roll(detector_direction_x_set, 1, axis=1)
-
-        # def swap_axes(a, c1, c2):
-        #     temp = np.copy(a[:,c1])
-        #     a[:,c1] = np.copy(a[:,c2])
-        #     a[:,c2] = temp
-        #     return a
-
-        # source_position_set = swap_axes(source_position_set, 0, 2)
-        # detector_position_set = swap_axes(detector_position_set, 0, 2)
-        # detector_direction_y_set = swap_axes(detector_direction_y_set, 0, 2)
-        # detector_direction_x_set = swap_axes(detector_direction_x_set, 0, 2)
-
-        # source_position_set = swap_axes(source_position_set, 1, 2)
-        # detector_position_set = swap_axes(detector_position_set, 1, 2)
-        # detector_direction_y_set = swap_axes(detector_direction_y_set, 1, 2)
-        # detector_direction_x_set = swap_axes(detector_direction_x_set, 1, 2)
-
             
         # The pixel size in mm is the norm of the vectors in detector_direction_x_set and detector_direction_y_set
-        pixel_size_in_mm = np.linalg.norm(
+        self.pixel_pitch_in_mm = np.linalg.norm(
             (detector_direction_x_set[0, 0], detector_direction_x_set[0, 1], detector_direction_x_set[0, 2])
         )
 
@@ -255,7 +261,7 @@ class RXSolutionsDataReader(object):
         self._ag.set_labels(['projection','vertical','horizontal'])
 
         # Panel is width x height
-        self._ag.set_panel(first_projection_data.shape[::-1], pixel_size_in_mm, origin='top-left')
+        self._ag.set_panel(projection_shape[::-1], self.pixel_pitch_in_mm, origin='top-left')
 
     def read(self):
         
@@ -270,9 +276,9 @@ class RXSolutionsDataReader(object):
             raise ValueError('The reader was not set properly.')
 
         # Create the TIFF reader
-        reader = TIFFStackReader()
-
-        reader.set_up(file_name=self.tiff_directory_path)
+        reader = TIFFStackReader(file_name=self.tiff_directory_path,
+                                 mode="bin", 
+                                 roi=None)
 
         ad = reader.read_as_AcquisitionData(self._ag)
               
