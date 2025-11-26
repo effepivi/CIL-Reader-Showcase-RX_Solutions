@@ -102,7 +102,7 @@ class RXSolutionsDataReader(object):
         # Error check
         # Check a file name was provided
         if file_name is None:
-            raise ValueError('Path to unireconstruction.xml or geom.csv file is required.')
+            raise ValueError('Path to unireconstruction.xml or geom.csv (or geometry.csv) file is required.')
 
         # Error check
         # Check if the file exists
@@ -113,8 +113,8 @@ class RXSolutionsDataReader(object):
         # Error check
         # Check the file name without the path
         file_type = self.__get_file_type(file_name)
-        if file_type != "unireconstruction.xml" and file_type != "geom.csv":
-            raise TypeError('This reader can only process \"unireconstruction.xml\" or \"geom.csv\" files. Got {}'.format(file_type))
+        if file_type != "unireconstruction.xml" and file_type != "geom.csv" and file_type != "geometry.csv":
+            raise TypeError('This reader can only process \"unireconstruction.xml\", \"geom.csv\" or \"geometry.csv\" files. Got {}'.format(file_type))
 
         # Get the directory path
         directory_path = Path(os.path.dirname(file_name))
@@ -128,7 +128,7 @@ class RXSolutionsDataReader(object):
         if file_type == "unireconstruction.xml":
             self.__set_up_orbital()
         # Per-projection geometry
-        elif file_type == "geom.csv":
+        elif file_type == "geom.csv" or file_type == "geometry.csv":
             self.__set_up_flexible()
         # Error check
         else:
@@ -195,6 +195,8 @@ class RXSolutionsDataReader(object):
 
         # Find the acquisition information
         acquisition_info = tree.find("conebeam/acquisitioninfo")
+        if acquisition_info is None:
+            acquisition_info = tree.find("conebeam/acquisitionInfo")        
         assert acquisition_info is not None
 
         # Find the acquisition geometry
@@ -207,16 +209,25 @@ class RXSolutionsDataReader(object):
         object_to_detector = source_to_detector - source_to_object
 
         # Create the acquisition geometry
+        # self._ag = AcquisitionGeometry.create_Cone3D(
+        #     source_position=[-source_to_object, 0, 0], 
+        #     detector_direction_x=[0, -1,  0],
+        #     detector_direction_y=[0, 0, 1],
+        #     detector_position=[object_to_detector, 0, 0], 
+        #     rotation_axis_position=[0, 0, 0],
+        #     units='mm')
+        
         self._ag = AcquisitionGeometry.create_Cone3D(
-            source_position=[-source_to_object, 0, 0], 
-            detector_direction_x=[0, 1,  0],
-            detector_direction_y=[0, 0, 1],
-            detector_position=[object_to_detector, 0, 0], 
+            source_position=[0, -source_to_object, 0],
             rotation_axis_position=[0, 0, 0],
-            units='mm')
-
+            detector_direction_x=[1, 0,  0],
+            detector_direction_y=[0, 0, 1],
+            detector_position=[0, object_to_detector, 0],
+            units='mm'
+        )
+        
         # Set the angles of rotation
-        self._ag.set_angles(np.linspace(0, 360, number_of_projections))
+        self._ag.set_angles(-np.linspace(0, 360, number_of_projections, endpoint=False))
 
         # Read the first projection to extract its size in nmber of pixels
         first_projection_data = imread(image_file_names[0])
@@ -241,8 +252,8 @@ class RXSolutionsDataReader(object):
         
         # Error check
         file_type = self.__get_file_type(self.file_name)
-        if file_type != "geom.csv":
-            raise TypeError('This method can only process \"geom.csv\" files. Got {}'.format(file_type))
+        if file_type != "geom.csv" and file_type != "geometry.csv":
+            raise TypeError('This method can only process \"geom.csv\" (or \"geometry.csv\") files. Got {}'.format(file_type))
 
         # Error check
         if self.mode is not None and self.mode != "bin":
@@ -250,18 +261,27 @@ class RXSolutionsDataReader(object):
         
 
 
-        meta_data = np.loadtxt(self.file_name, 
+        meta_data = np.genfromtxt(self.file_name, 
             delimiter=';',
-            skiprows=2,
+            skip_header=2,
             usecols=(1,2,3,4,5,6,7,8,9,10,11,12))
+
+        proj_files = np.genfromtxt(self.file_name, 
+            delimiter=';',
+            skip_header=2,
+            dtype= str,
+            usecols=(0),
+            encoding=None)
         
+        meta_data = meta_data[np.where(np.char.find(proj_files, "Proj\\")>=0)]
+       
         # Get the number of projections
         number_of_projections = meta_data.shape[0]
 
         # Look for the name of projection images
         image_file_names = [image for image in self.tiff_directory_path.rglob("*.tif")]
         if len(image_file_names) != number_of_projections:
-            raise IOError("There are " + str(len(image_file_names)) + " TIFF files in the projection directory. We expected " + str(number_of_projections) + " based on the \"geom.csv\" file.")
+            raise IOError("There are " + str(len(image_file_names)) + " TIFF files in the projection directory. We expected " + str(number_of_projections) + " based on the \"" + file_type + "\" file.")
             
         # Read the first projection to extract its size in nmber of pixels
         first_projection_data = imread(image_file_names[0]);
@@ -274,26 +294,27 @@ class RXSolutionsDataReader(object):
         detector_direction_x_set = (meta_data[:,9:] - detector_position_set) / projection_shape[0]*2
 
         # Roughly recentre the data on the Y-axis
-        Y = 0.5 * np.mean(meta_data[:,4]) + 0.5 * np.mean(meta_data[:,1])
+        Y = 0.5 * np.mean(detector_direction_y_set[:,1]) + 0.5 * np.mean(source_position_set[:,1])
+        source_position_set[:,1] -= Y
+        detector_position_set[:,1] -= Y
+
+        # More finely recentre the data on the Z-axis (previously Y-axis)
+        sod = (np.sum(source_position_set**2, axis=1)**.5).mean()
+        sdd = (np.sum((source_position_set-detector_position_set)**2, axis=1)**.5).mean()
+        print(sdd, sod)
+        alpha = sod / sdd
+        Y = alpha * np.mean(source_position_set[:,1]) + (1 - alpha) * np.mean(source_position_set[:,1])
         source_position_set[:,1] -= Y
         detector_position_set[:,1] -= Y
 
         # Axes transformation
-        # # X->Y
-        # # Y->Z
-        # # Z->X
+        # X->Y
+        # Y->Z
+        # Z->X
         source_position_set = np.roll(source_position_set, 1, axis=1)
         detector_position_set = np.roll(detector_position_set, 1, axis=1)
         detector_direction_y_set = np.roll(detector_direction_y_set, 1, axis=1)
         detector_direction_x_set = np.roll(detector_direction_x_set, 1, axis=1)
-        
-        # More finely recentre the data on the Z-axis (previously Y-axis)
-        sod = (np.sum(source_position_set**2, axis=1)**.5).mean()
-        sdd = (np.sum((source_position_set-detector_position_set)**2, axis=1)**.5).mean()
-        alpha = sod / sdd
-        Z = alpha * np.mean(meta_data[:,4]) + (1 - alpha) * np.mean(meta_data[:,1])
-        source_position_set[:,2] -= Z
-        detector_position_set[:,2] -= Z
 
         # The pixel size in mm is the norm of the vectors in detector_direction_x_set and detector_direction_y_set
         pixel_pitch_in_mm = np.linalg.norm(
@@ -330,8 +351,6 @@ class RXSolutionsDataReader(object):
         )
 
     def read(self):
-        print(self.mode)
-        print(self.roi)
         '''
         Reads projections and returns AcquisitionData with corresponding geometry,
         arranged as ['angle', horizontal'] if a single slice is loaded
