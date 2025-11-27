@@ -25,6 +25,12 @@ from pathlib import Path
 from xml.etree import ElementTree
 from tifffile import imread
 
+try:
+    from pyquaternion import Quaternion
+except:
+    raise ImportError("pyquaternion must be installed to use RXSolutionsDataReader, see https://pypi.org/project/pyquaternion/")
+
+
 class RXSolutionsDataReader(object):
 
     '''
@@ -42,19 +48,26 @@ class RXSolutionsDataReader(object):
     def __init__(self,
                  file_name: str=None,
                  pixel_pitch_in_mm: tuple[float,float]|float=None,
+                 first_angle: float=None,
+                 last_angle: float=None,
+                 last_angle_included: bool=False,
                  normalise: bool=True,
                  mode: str="bin",
                  roi = None
                 ):
 
-        # Initialise class attributes to None
-        self.file_name = None
-        self.pixel_pitch_in_mm = None,
+        # Initialise class attributes
+        self.file_name = file_name
+        self.pixel_pitch_in_mm = pixel_pitch_in_mm
+        self.first_angle = first_angle
+        self.last_angle = last_angle
+        self.last_angle_included = last_angle_included
         self.normalise = normalise
+        self.mode = mode
+        self.roi = roi
+
         self._ag = None # The acquisition geometry object
         self.tiff_directory_path = None
-        self.mode = mode
-        self.roi = None
 
         # The file name is set
         if file_name is not None:
@@ -62,6 +75,9 @@ class RXSolutionsDataReader(object):
             # Initialise the instance
             self.set_up(file_name=file_name,
                 pixel_pitch_in_mm=pixel_pitch_in_mm,
+                first_angle=first_angle, 
+                last_angle=last_angle, 
+                last_angle_included=last_angle_included,
                 normalise=normalise,
                 mode=mode,
                 roi=roi)
@@ -70,6 +86,9 @@ class RXSolutionsDataReader(object):
     def set_up(self,
                file_name: str=None,
                pixel_pitch_in_mm: tuple[float,float]|float=None,
+               first_angle: float=None,
+               last_angle: float=None,
+               last_angle_included: bool=False,
                normalise: bool=True,
                mode: str="bin",
                roi = None):
@@ -87,6 +106,9 @@ class RXSolutionsDataReader(object):
 
         # Save the attributes
         self.file_name = file_name
+        self.first_angle = first_angle
+        self.last_angle = last_angle
+        self.last_angle_included = last_angle_included
         self.mode = mode
         self.roi = roi
 
@@ -174,6 +196,14 @@ class RXSolutionsDataReader(object):
         if self.pixel_pitch_in_mm is None:
             raise ValueError("The pixel pitch in mm must be known when using \"unireconstruction.xml\".")
 
+        # Error check
+        if self.first_angle is None:
+            raise ValueError("The first angle must be known when using \"unireconstruction.xml\".")
+
+        # Error check
+        if self.last_angle is None:
+            raise ValueError("The last angle must be known when using \"unireconstruction.xml\".")
+        
         scaling_factor_axis_1, scaling_factor_axis_2 = self.__get_scaling_factors()
         self.pixel_pitch_in_mm[0] *= scaling_factor_axis_2
         self.pixel_pitch_in_mm[1] *= scaling_factor_axis_1
@@ -216,19 +246,23 @@ class RXSolutionsDataReader(object):
         #     detector_position=[object_to_detector, 0, 0], 
         #     rotation_axis_position=[0, 0, 0],
         #     units='mm')
+
+        # the Z axis with this quaternion (x:0.005, y:0.005, z:0.005, w:0.99996).
+        q = Quaternion(x=0.005, y=0.005, z=0.005, w=0.99996)
+        print(q.rotate([0, 0, 1]))
         
         self._ag = AcquisitionGeometry.create_Cone3D(
             source_position=[0, -source_to_object, 0],
             rotation_axis_position=[0, 0, 0],
             detector_direction_x=[1, 0,  0],
-            detector_direction_y=[0, 0, 1],
+            detector_direction_y=[0, 0, 1], # Not working => q.rotate([0, 0, 1])
             detector_position=[0, object_to_detector, 0],
             units='mm'
         )
         
         # Set the angles of rotation
-        self._ag.set_angles(-np.linspace(0, 360, number_of_projections, endpoint=False))
-
+        self._ag.set_angles(np.linspace(self.first_angle, self.last_angle, number_of_projections, endpoint=self.last_angle_included))
+       
         # Read the first projection to extract its size in nmber of pixels
         first_projection_data = imread(image_file_names[0])
         projection_shape = first_projection_data.shape
