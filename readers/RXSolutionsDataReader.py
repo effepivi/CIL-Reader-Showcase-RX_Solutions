@@ -25,10 +25,10 @@ from pathlib import Path
 from xml.etree import ElementTree
 from tifffile import imread
 
-try:
-    from pyquaternion import Quaternion
-except:
-    raise ImportError("pyquaternion must be installed to use RXSolutionsDataReader, see https://pypi.org/project/pyquaternion/")
+# try:
+#     from pyquaternion import Quaternion
+# except:
+#     raise ImportError("pyquaternion must be installed to use RXSolutionsDataReader, see https://pypi.org/project/pyquaternion/")
 
 
 class RXSolutionsDataReader(object):
@@ -248,8 +248,8 @@ class RXSolutionsDataReader(object):
         #     units='mm')
 
         # the Z axis with this quaternion (x:0.005, y:0.005, z:0.005, w:0.99996).
-        q = Quaternion(x=0.005, y=0.005, z=0.005, w=0.99996)
-        print(q.rotate([0, 0, 1]))
+        # q = Quaternion(x=0.005, y=0.005, z=0.005, w=0.99996)
+        # print(q.rotate([0, 0, 1]))
         
         self._ag = AcquisitionGeometry.create_Cone3D(
             source_position=[0, -source_to_object, 0],
