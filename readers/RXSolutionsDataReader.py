@@ -25,12 +25,6 @@ from pathlib import Path
 from xml.etree import ElementTree
 from tifffile import imread
 
-# try:
-#     from pyquaternion import Quaternion
-# except:
-#     raise ImportError("pyquaternion must be installed to use RXSolutionsDataReader, see https://pypi.org/project/pyquaternion/")
-
-
 class RXSolutionsDataReader(object):
 
     '''
@@ -247,10 +241,6 @@ class RXSolutionsDataReader(object):
         #     rotation_axis_position=[0, 0, 0],
         #     units='mm')
 
-        # the Z axis with this quaternion (x:0.005, y:0.005, z:0.005, w:0.99996).
-        # q = Quaternion(x=0.005, y=0.005, z=0.005, w=0.99996)
-        # print(q.rotate([0, 0, 1]))
-        
         self._ag = AcquisitionGeometry.create_Cone3D(
             source_position=[0, -source_to_object, 0],
             rotation_axis_position=[0, 0, 0],
@@ -306,9 +296,12 @@ class RXSolutionsDataReader(object):
             dtype= str,
             usecols=(0),
             encoding=None)
-        
-        meta_data = meta_data[np.where(np.char.find(proj_files, "Proj\\")>=0)]
-       
+
+        subset_meta_data = meta_data[np.where(np.char.find(proj_files, "Proj\\")>=0)]
+
+        if subset_meta_data.size > 0:
+            meta_data = subset_meta_data
+
         # Get the number of projections
         number_of_projections = meta_data.shape[0]
 
@@ -350,7 +343,6 @@ class RXSolutionsDataReader(object):
         # More finely recentre the data on the Z-axis (previously Y-axis)
         sod = (np.sum(source_position_set**2, axis=1)**.5).mean()
         sdd = (np.sum((source_position_set-detector_position_set)**2, axis=1)**.5).mean()
-        print(sdd, sod)
         alpha = sod / sdd
         Y = alpha * np.mean(source_position_set[:,1]) + (1 - alpha) * np.mean(source_position_set[:,1])
         source_position_set[:,1] -= Y
@@ -365,27 +357,27 @@ class RXSolutionsDataReader(object):
         detector_direction_y_set = np.roll(detector_direction_y_set, 1, axis=1)
         detector_direction_x_set = np.roll(detector_direction_x_set, 1, axis=1)
 
-        # Rotation matrix for 90 degrees around the z-axis (clockwise)
-        # cos(-90°) = 0, sin(-90°) = -1
-        rotation = np.array([
-            [0, 1, 0],
-            [-1, 0, 0],
-            [0, 0, 1]
-        ])
+        # # Rotation matrix for 90 degrees around the z-axis (clockwise)
+        # # cos(-90°) = 0, sin(-90°) = -1
+        # rotation = np.array([
+        #     [0, 1, 0],
+        #     [-1, 0, 0],
+        #     [0, 0, 1]
+        # ])
+        #
+        # # Rotate the acquisition geometry so that it matches the orbital geometry
+        # source_position_set = source_position_set @ rotation.T
+        # detector_position_set = detector_position_set @ rotation.T
+        # detector_direction_y_set = detector_direction_y_set @ rotation.T
+        # detector_direction_x_set = detector_direction_x_set @ rotation.T
 
-        # Rotate the acquisition geometry so that it matches the orbital geometry
-        source_position_set = source_position_set @ rotation.T
-        detector_position_set = detector_position_set @ rotation.T
-        detector_direction_y_set = detector_direction_y_set @ rotation.T
-        detector_direction_x_set = detector_direction_x_set @ rotation.T
-
+        # Apply the scaling factors
         scaling_factor_axis_1, scaling_factor_axis_2 = self.__get_scaling_factors()
         self.pixel_pitch_in_mm = [
             pixel_pitch_in_mm * scaling_factor_axis_2,
             pixel_pitch_in_mm * scaling_factor_axis_1
         ]
 
-        print(self.pixel_pitch_in_mm)
         # Create the acquisition geometry
         self._ag = AcquisitionGeometry.create_Cone3D_Flex(
             source_position_set, 
