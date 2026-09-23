@@ -324,8 +324,23 @@ class RXSolutionsDataReader(object):
         # Format the metadata
         source_position_set = meta_data[:,:3]
         detector_position_set = meta_data[:,3:6]
-        detector_direction_y_set = (meta_data[:,6:9] - detector_position_set) / projection_shape[1]*2
-        detector_direction_x_set = (meta_data[:,9:] - detector_position_set) / projection_shape[0]*2
+        detector_direction_y_set = (meta_data[:,6:9] - detector_position_set) / projection_shape[0]*2
+        detector_direction_x_set = (meta_data[:,9:] - detector_position_set) / projection_shape[1]*2
+
+        # The pixel size in mm is the norm of the vectors in detector_direction_x_set and detector_direction_y_set
+        pixel_pitch_in_mm = np.linalg.norm(
+            (detector_direction_x_set[0, 0], detector_direction_x_set[0, 1], detector_direction_x_set[0, 2])
+        )
+
+        pixel_pitch_direction_x_in_mm = np.linalg.norm(
+            (detector_direction_x_set[0, 0], detector_direction_x_set[0, 1], detector_direction_x_set[0, 2])
+        )
+        pixel_pitch_direction_y_in_mm = np.linalg.norm(
+            (detector_direction_y_set[0, 0], detector_direction_y_set[0, 1], detector_direction_y_set[0, 2])
+        )
+
+        detector_direction_x_set /= pixel_pitch_direction_x_in_mm
+        detector_direction_y_set /= pixel_pitch_direction_y_in_mm
 
         # Roughly recentre the data on the Y-axis
         Y = 0.5 * np.mean(detector_direction_y_set[:,1]) + 0.5 * np.mean(source_position_set[:,1])
@@ -350,16 +365,27 @@ class RXSolutionsDataReader(object):
         detector_direction_y_set = np.roll(detector_direction_y_set, 1, axis=1)
         detector_direction_x_set = np.roll(detector_direction_x_set, 1, axis=1)
 
-        # The pixel size in mm is the norm of the vectors in detector_direction_x_set and detector_direction_y_set
-        pixel_pitch_in_mm = np.linalg.norm(
-            (detector_direction_x_set[0, 0], detector_direction_x_set[0, 1], detector_direction_x_set[0, 2])
-        )
+        # Rotation matrix for 90 degrees around the z-axis (clockwise)
+        # cos(-90°) = 0, sin(-90°) = -1
+        rotation = np.array([
+            [0, 1, 0],
+            [-1, 0, 0],
+            [0, 0, 1]
+        ])
+
+        # Rotate the acquisition geometry so that it matches the orbital geometry
+        source_position_set = source_position_set @ rotation.T
+        detector_position_set = detector_position_set @ rotation.T
+        detector_direction_y_set = detector_direction_y_set @ rotation.T
+        detector_direction_x_set = detector_direction_x_set @ rotation.T
+
         scaling_factor_axis_1, scaling_factor_axis_2 = self.__get_scaling_factors()
         self.pixel_pitch_in_mm = [
             pixel_pitch_in_mm * scaling_factor_axis_2,
             pixel_pitch_in_mm * scaling_factor_axis_1
         ]
-        
+
+        print(self.pixel_pitch_in_mm)
         # Create the acquisition geometry
         self._ag = AcquisitionGeometry.create_Cone3D_Flex(
             source_position_set, 
